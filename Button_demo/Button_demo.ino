@@ -1,16 +1,16 @@
 /* MakeFashion Kit Button demo
- * -------------------------------------------
- *  
- * Requires:
- * ---------
- *  MakeFashion controller board
- *  SeeedStudio Button ( http://wiki.seeedstudio.com/Grove-Button/ )
- *  FastLED-compatible LEDs ( https://github.com/FastLED/FastLED/wiki/Overview#chipsets )
- *  
- * Dependencies:
- * -------------
- *  FastLED ( Available via Arduino package manager )
- */
+   -------------------------------------------
+
+   Requires:
+   ---------
+    MakeFashion controller board
+    SeeedStudio Button ( http://wiki.seeedstudio.com/Grove-Button/ )
+    FastLED-compatible LEDs ( https://github.com/FastLED/FastLED/wiki/Overview#chipsets )
+
+   Dependencies:
+   -------------
+    FastLED ( Available via Arduino package manager )
+*/
 
 #include "FastLED.h"
 
@@ -20,7 +20,7 @@ FASTLED_USING_NAMESPACE
 #warning "Requires FastLED 3.1 or later; check github for latest code."
 #endif
 
-#define PIN_LEDARRAY    6
+#define PIN_LEDARRAY     6
 #define PIN_BUTTON       3
 
 #define LED_TYPE           WS2812B
@@ -31,6 +31,8 @@ FASTLED_USING_NAMESPACE
 #define TOGGLE_INTERVAL    2000 // milliseconds
 
 // function prototypes
+void fire(CRGB *gArray, int gSize);
+void outrun(CRGB *gArray, int gSize);
 void rainbow(CRGB *gArray, int gSize);
 void rainbowWithGlitter(CRGB *gArray, int gSize);
 void confetti(CRGB *gArray, int gSize);
@@ -47,8 +49,9 @@ void juggle_redblue(CRGB *gArray, int gSize);
 void blinky(CRGB *gArray, int gSize);
 
 typedef void (*SimplePatternList)(CRGB *, int);
-SimplePatternList gPatterns[] = { rainbow, rainbowWithGlitter, confetti, sinelon, juggle, bpm, sinelon_red, \
-                                  sinelon_blue, juggle_red, juggle_blue, sinelon_redblue, juggle_redblue };
+SimplePatternList gPatterns[] = { fire, outrun, rainbow, rainbowWithGlitter, confetti, sinelon, juggle, bpm, sinelon_red, \
+                                            sinelon_blue, juggle_red, juggle_blue, sinelon_redblue, juggle_redblue
+                                };
 
 CRGB leds_array[NUM_LEDS];
 unsigned int gArray_PatternNumber = 0;
@@ -72,10 +75,9 @@ void setup() {
   state_last = LOW;
   time_start = millis();
   time_interval = 0;
-  
+
   FastLED.addLeds<LED_TYPE, PIN_LEDARRAY, COLOR_ORDER>(leds_array, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
-
 }
 
 void loop()
@@ -84,29 +86,35 @@ void loop()
 
   check_power_toggle();
   gPatterns[gArray_PatternNumber](leds_array, NUM_LEDS);
-  
-  if (ledpower) { FastLED.show(); }
-  else { FastLED.clear(); }
- 
-  EVERY_N_MILLISECONDS( 20 ) { gHue++; }
+
+  if (ledpower) {
+    FastLED.show();
+  }
+  else {
+    FastLED.clear();
+  }
+
+  EVERY_N_MILLISECONDS( 20 ) {
+    gHue++;
+  }
   FastLED.delay(1000 / FRAMES_PER_SECOND);
 }
 
 void check_power_toggle() {
-  if(state_now != state_last) {
-    if( state_toggle) {
+  if (state_now != state_last) {
+    if ( state_toggle) {
       state_toggle = false;
       nextPattern();
     } else {
-      if( state_now ) {
+      if ( state_now ) {
         state_toggle = true;
         time_start = millis();
       }
     }
   } else {
-    if(state_toggle) {
+    if (state_toggle) {
       time_interval = millis() - time_start;
-      if(time_interval > TOGGLE_INTERVAL) {
+      if (time_interval > TOGGLE_INTERVAL) {
         ledpower = not ledpower;
         state_toggle = false;
         time_start = millis();
@@ -124,10 +132,67 @@ void nextPattern()
   gArray_PatternNumber = (gArray_PatternNumber + 1) % ARRAY_SIZE(gPatterns);
 }
 
+/* COOLING: How much does the air cool as it rises?
+  Less cooling = taller flames.  More cooling = shorter flames.
+  Default 50, suggested range 20-100 */
+#define COOLING  40
+/* SPARKING: What chance (out of 255) is there that a new spark will be lit?
+  Higher chance = more roaring fire.  Lower chance = more flickery fire.
+  Default 120, suggested range 50-200. */
+#define SPARKING 120
+void fire(CRGB *gArray, int gSize)
+{
+  // Array of temperature readings at each simulation cell
+  static byte heat[NUM_LEDS];
+
+  // Step 1.  Cool down every cell a little
+  for ( int i = 0; i < NUM_LEDS; i++) {
+    heat[i] = qsub8( heat[i],  random8(0, ((COOLING * 10) / NUM_LEDS) + 2));
+  }
+
+  // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+  for ( int k = NUM_LEDS - 1; k >= 2; k--) {
+    heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
+  }
+
+  // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+  if ( random8() < SPARKING ) {
+    int y = random8(7);
+    heat[y] = qadd8( heat[y], random8(160, 255) );
+  }
+
+  // Step 4.  Map from heat cells to LED colors
+  for ( int j = 0; j < NUM_LEDS; j++) {
+    gArray[j] = HeatColor(heat[j]);
+  }
+}
+
+CRGBPalette16 outrunPalette = CRGBPalette16(
+                                0x240F3A, 0x240F3A, 0x240F3A,
+                                0x00D1F2, 0x00D1F2, 0x00D1F2, 0x00D1F2,
+                                0xFC3C0C, 0xFC3C0C, 0xFC3C0C,
+                                0xAD0093, 0xAD0093, 0xAD0093,
+                                0xF71D2F, 0xF71D2F, 0xF71D2F
+                              );
+void outrun(CRGB *gArray, int gSize)
+{
+  static int lastPos = 0;
+  fadeToBlackBy( gArray, gSize, 30);
+
+  int currentPos = beatsin16(15, 0, gSize / 2);
+  int pos1 = (lastPos > currentPos) ? ((gSize / 2) - currentPos) : currentPos;
+  int pos2 = (gSize - 1) - pos1;
+
+  CRGB color = ColorFromPalette(outrunPalette, gHue, BRIGHTNESS, LINEARBLEND);
+  gArray[pos1] += color;
+  gArray[pos2] += color;
+
+  lastPos = currentPos;
+}
+
 void rainbow(CRGB *gArray, int gSize)
 {
   // FastLED's built-in rainbow generator
-  
   fill_rainbow( gArray, gSize, gHue, 7);
 }
 
